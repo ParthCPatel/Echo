@@ -1,0 +1,19 @@
+{
+  "name": "echo-desktop-audio",
+  "version": "1.0.0",
+  "description": "Electron app for Linux audio capture with PulseAudio",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Echo Team",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^33.2.1"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3",
+    "mongoose": "^9.1.1"
+  }
+}

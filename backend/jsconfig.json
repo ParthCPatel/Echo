@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2020",
+    "checkJs": true,
+    "maxNodeModuleJsDepth": 1
+  },
+  "exclude": ["node_modules", "dist"]
+}

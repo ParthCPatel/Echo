@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <title>Echo Audio Capture</title>
+    <!-- Google Fonts: Inter and JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="dashboard-grid">
+        
+        <!-- Sidebar -->
+        <aside class="sidebar glass-effect">
+            <div class="brand">
+                <h1>Echo</h1>
+                <div class="status-indicator-box">
+                    <div class="indicator" id="indicator"></div>
+                    <span id="mode">Initializing...</span>
+                </div>
+            </div>
+
+            <nav class="controls-stack">
+                <button id="btn-start" class="btn primary">Start Recording</button>
+                <button id="btn-stop" class="btn danger" disabled>End Recording</button>
+                <button id="btn-play" class="btn secondary">Play</button>
+                <button id="btn-transcribe" class="btn transcribe">Transcribe</button>
+            </nav>
+        </aside>
+
+        <!-- Main Content (Center) -->
+        <main class="main-content glass-effect">
+            <div class="notes-header">
+                <h2>Live Session Notes</h2>
+                <span class="badge">AI Assisted</span>
+            </div>
+            
+            <div class="notes-container">
+                <textarea id="notes-input" placeholder="Type your notes here while recording..."></textarea>
+            </div>
+
+            <!-- Hidden Container for Chat (to preserve functionality for now) -->
+            <div id="transcript-container" style="display: none; margin-top: 20px;">
+                <h3>Transcript Log</h3>
+                <div id="chat-box" class="chat-box"></div>
+            </div>
+        </main>
+
+        <!-- Footer Actions -->
+        <footer class="action-footer">
+            <button id="btn-enhanced-notes" class="action-card glass-effect">
+                <h3>Enhanced Notes</h3>
+                <p id="desc-enhanced">AI-polished notes</p>
+            </button>
+            <button id="btn-summary" class="action-card glass-effect">
+                <h3>Summary</h3>
+                <p id="desc-summary">Generate session summary</p>
+            </button>
+            <button id="btn-decisions" class="action-card glass-effect">
+                <h3>Decision</h3>
+                <p id="desc-decisions">View key decisions</p>
+            </button>
+            <button id="btn-actions" class="action-card glass-effect">
+                <h3>Actions</h3>
+                <p id="desc-actions">View action items</p>
+            </button>
+        </footer>
+
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

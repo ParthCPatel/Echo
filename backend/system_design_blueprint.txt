@@ -1,0 +1,85 @@
+Echo Project - Technical Blueprint & System Design
+==================================================
+
+1. Product Philosophy: "Source of Truth"
+---------------------------------------
+The core differentiator of Echo is that the User's Notes are the authoritative source of truth. The AI enhances, it does not invent.
+- Rule 1: User notes are authoritative.
+- Rule 2: Transcript is supporting evidence, not output.
+- Rule 3: Original notes are immutable (always store raw vs enhanced).
+
+2. Technology Stack Selection
+-----------------------------
+We will use a Full TypeScript Stack for type safety across the entire pipeline.
+
+- Language: TypeScript (Strict mode)
+- App Shell: Electron (using electron-vite)
+  - Purpose: Native access for audio recording and local filesystem.
+- Frontend: React + Tailwind CSS
+- Editor: Tiptap (Headless wrapper around ProseMirror)
+  - Purpose: Strong state management (JSON) to distinguish "raw" vs "enhanced" nodes.
+- AI Orchestration: LangGraph.js
+  - Purpose: Stateful, cyclic graphs for validation and multi-step reasoning.
+- LLM Interface: LangChain.js (OpenAI gpt-4o or Claude 3.5 Sonnet)
+- Transcription:
+  - Phase 1: OpenAI Whisper API or Deepgram API.
+  - Phase 2: Local whisper.cpp (future).
+- Database: SQLite (better-sqlite3 + drizzle-orm)
+  - Purpose: Store Meetings, Transcripts (JSON arrays), and relationships.
+
+3. High-Level Architecture
+--------------------------
+Two distinct layers to keep the UI fast and 'distraction-free'.
+
+A. The Renderer (UI Layer)
+- "Smart Typewriter" interface.
+- Holds `rawNotes` in local state.
+- Handles `MediaRecorder` for finding microphone.
+- Sends `currentText` + `audioBlob` to Main Process via IPC.
+
+B. The Main Process (Intelligence Layer)
+- Runs the LangGraph pipeline.
+- Handles heavy computation and API calls.
+- Persists data to SQLite.
+
+4. The LangGraph Pipeline Design
+--------------------------------
+The core intelligence engine.
+
+State Object (`EnhanceNotesState`):
+- Inputs: `rawNotes` (string), `transcript` (Segment[])
+- Outputs: `enhancedNotes`, `summary`, `actionItems`, `decisions`
+- Validation: `validationErrors`, `retryCount`
+
+Node Flow:
+1. `validate_inputs`: Deterministic check of input quality.
+2. `clarify_notes`: The "Editor". Rewrites for grammar/clarity using transcript context. STRICT constraint: Do not change meaning.
+3. `structure_notes`: The "Organizer". Applies markdown structure (headers, bullets).
+4. `extract_entities`: The "Analyst". Extracts Action Items and Decisions.
+   - CRITICAL: Must include `evidence_quote` from transcript.
+5. `verify_grounding`: The "Auditor".
+   - Self-reflection node.
+   - Checks `evidence_quote` against actual transcript.
+   - If quote doesn't exist or doesn't match -> DROP the item.
+   - Prevents hallucinations.
+
+5. Implementation Plan (Phase 1)
+--------------------------------
+Step 1: The Core (No UI)
+- Setup TypeScript Monorepo.
+- Define `types.ts` (Data Model).
+- Implement `brain/graph.ts` (LangGraph).
+- Create `test_pipeline.ts` for headless validation.
+
+Step 2: The UI Shell
+- Setup Electron + React.
+- Build Tiptap Editor component.
+- Create `MeetingRepository` (SQLite).
+
+Step 3: Integration
+- Connect "Enhance" button to `run_graph`.
+- Dual-view: Raw vs Enhanced.
+
+Step 4: Audio
+- Integrate `MediaRecorder`.
+- Connect Transcription API.
