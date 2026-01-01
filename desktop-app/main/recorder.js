@@ -11,9 +11,9 @@ function startRecording() {
   }
 
   console.log("Starting recording...");
-  // parecord -d VirtualSink.monitor --file-format=wav test_app.wav
+  // parecord -d RecordingMixSink.monitor --file-format=wav test_app.wav
   recordProcess = spawn("parecord", [
-    "-d", "VirtualSink.monitor",
+    "-d", "RecordingMixSink.monitor",
     "--file-format=wav",
     RECORD_FILE
   ]);

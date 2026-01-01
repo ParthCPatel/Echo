@@ -1,4 +1,4 @@
-const { run } = require("./pactl");
+const { run, output } = require("./pactl");
 const { detectMode } = require("./deviceDetector");
 
 let currentMode = "UNKNOWN";
@@ -10,8 +10,8 @@ function initAudio() {
   try {
       run("pactl info");
       console.log("Audio server is already reachable. Skipping aggressive cleanup.");
-      // We still might want to ensure our modules are loaded, but let's be careful.
-      // If we just want to setup:
+      // CRITICAL: Unload existing modules to prevent stacking (double audio/feedback)
+      softCleanup();
       setup(); 
       return; 
   } catch (e) {
@@ -56,66 +56,114 @@ function cleanup() {
   // run("pactl unload-module module-loopback");
 }
 
+function softCleanup() {
+  console.log("Soft Cleanup: Unloading existing Echo modules...");
+  // Unload loopbacks (Mic->Sink, Sink->Sink, etc.)
+  // We effectively hammer unload until it fails (no more modules) or we hit a limit
+  // This prevents the "Noise/Feedback" from stacked loops.
+  for (let i = 0; i < 10; i++) {
+    // If output returns empty or error, we are done
+    // But our 'run' catches errors. We can check output of 'pactl list modules' or just try unload.
+    // simpler: just try unload.
+    try {
+        // We use execSync directly to catch the error for breaking the loop
+        require("child_process").execSync("pactl unload-module module-loopback", { stdio: 'ignore' });
+    } catch (e) {
+        break; // No more loopbacks
+    }
+  }
+
+  // Unload null sinks
+  for (let i = 0; i < 5; i++) {
+    try {
+        require("child_process").execSync("pactl unload-module module-null-sink", { stdio: 'ignore' });
+    } catch (e) {
+        break; // No more null sinks
+    }
+  }
+  console.log("Soft Cleanup Complete.");
+}
+
 function setup() {
   const { mode, source } = detectMode();
   console.log(`Detected Mode: ${mode}, Source: ${source}`);
   currentMode = mode;
 
-  // 1. Create VirtualSink at 48kHz
-  run("pactl load-module module-null-sink sink_name=VirtualSink rate=48000 sink_properties=device.description=VirtualSink");
+  // --- 1. Create Sinks ---
   
-  // Ensure it's not muted and volume is 100%
-  run("pactl set-sink-mute VirtualSink 0");
-  run("pactl set-sink-volume VirtualSink 100%");
+  // A. SystemAudioSink: Takes all OS audio. We will route this to Speakers AND MixSink.
+  run("pactl load-module module-null-sink sink_name=SystemAudioSink rate=48000 sink_properties=device.description=SystemAudioSink");
+  run("pactl set-sink-mute SystemAudioSink 0");
+  run("pactl set-sink-volume SystemAudioSink 100%");
 
-  // 2. Connect Mic -> VirtualSink (if available)
+  // B. RecordingMixSink: Takes System Audio + Mic. We record from here. User DOES NOT hear this.
+  run("pactl load-module module-null-sink sink_name=RecordingMixSink rate=48000 sink_properties=device.description=RecordingMixSink");
+  run("pactl set-sink-mute RecordingMixSink 0");
+  run("pactl set-sink-volume RecordingMixSink 100%");
+
+
+  // --- 2. Set Default Sink (Capture System Audio) ---
+  // All apps will now send audio to SystemAudioSink by default
+  run("pactl set-default-sink SystemAudioSink");
+
+
+  // --- 3. Route Output (Hearing Path) ---
+  // We need to route SystemAudioSink output to the Physical Speakers so user can hear.
+  
+  // Find Speaker Sink
+  let speakerSink = "alsa_output.pci-0000_00_1b.0.analog-stereo"; // Fallback default
+  
+  if (mode === "USB") {
+     // Get list of actual available sinks
+     const sinkOutput = output("pactl list short sinks");
+     const sinks = sinkOutput.split('\n').map(line => line.split('\t')[1]).filter(Boolean);
+     
+     console.log("Available Sinks:", sinks);
+
+     // Try to match the specific device ID from the source
+     // Source example: alsa_input.usb-Generic_...-00.mono-fallback
+     // Extract 'usb-Generic_...-00'
+     const idMatch = source.match(/usb-[^.]+/);
+     const usbId = idMatch ? idMatch[0] : "usb"; // fallback to generic 'usb' if regex fails
+     
+     // Find a sink that contains this ID and is an output
+     const specificSink = sinks.find(s => s.includes(usbId) && s.includes("alsa_output"));
+     const anyUsbSink = sinks.find(s => s.includes("usb") && s.includes("alsa_output"));
+     
+     if (specificSink) {
+         speakerSink = specificSink;
+     } else if (anyUsbSink) {
+         console.log("Exact USB pair not found, using first available USB sink.");
+         speakerSink = anyUsbSink;
+     } else {
+         console.log("Warning: USB Mode detected but no USB output sink found. Falling back to default PCI.");
+     }
+  }
+  
+  console.log(`Routing System Audio to Speakers: ${speakerSink}`);
+  run(`pactl set-sink-mute ${speakerSink} 0`);
+  run(`pactl set-sink-volume ${speakerSink} 100%`);
+  
+  // Loopback 1: System -> Speakers (Hearing)
+  run(`pactl load-module module-loopback source=SystemAudioSink.monitor sink=${speakerSink} latency_msec=10`);
+
+
+  // --- 4. Route Input (Recording Path) ---
+  
+  // Loopback 2: System -> MixSink (Recording)
+  run(`pactl load-module module-loopback source=SystemAudioSink.monitor sink=RecordingMixSink latency_msec=10`);
+
+  // Loopback 3: Mic -> MixSink (Recording)
   if (mode !== "SYSTEM_ONLY" && source) {
-    console.log(`Unmuting source: ${source}`);
-    // Ensure the mic itself is not muted
+    console.log(`Routing Mic (${source}) to RecordingMixSink`);
     run(`pactl set-source-mute ${source} 0`);
     run(`pactl set-source-volume ${source} 100%`);
     
-    // latency_msec=10 for low delay
-    run(`pactl load-module module-loopback source=${source} sink=VirtualSink latency_msec=10`);
-  }
-
-  // 3. Setup System Audio -> VirtualSink
-  // Making VirtualSink the default sink captures all application audio
-  run("pactl set-default-sink VirtualSink");
-
-  // Force move existing streams to the new default sink (important for apps already running)
-  // detailed helper would be needed for robustness, but usually setting default catches new streams.
-  // For now, relies on apps respecting the switch or being restarted.
-  
-  // 4. Monitor VirtualSink -> Speakers
-  // We need to find the speakers. Usually pci or usb output.
-  // We can try to route to the same device family as the input if USB, or fallback to PCI.
-  // For simplicity, we'll try to route to the hardware output corresponding to the input 'family', 
-  // or just find the first non-virtual sink.
-  
-  // Simple heuristic: Route back to the "best" physical sink.
-  // Since we just set VirtualSink as default, we need to explicitly find a physical sink.
-  // This part can be tricky. Let's assume we want to hear on the same device we are speaking into if USB.
-  
-  let speakerSink = "alsa_output.pci-0000_00_1b.0.analog-stereo"; // Fallback default
-  
-  // If using USB mic, likely want USB speakers
-  if (mode === "USB" && source.includes("usb")) {
-     // replace 'input' with 'output' in source name often works for USB sets
-     // e.g. alsa_input.usb-Generic... -> alsa_output.usb-Generic...
-     const potentialSink = source.replace("alsa_input", "alsa_output");
-     speakerSink = potentialSink;
+    // IMPORTANT: sink=RecordingMixSink (NOT Speakers!)
+    run(`pactl load-module module-loopback source=${source} sink=RecordingMixSink latency_msec=10`);
   }
   
-  console.log(`Setting up monitor loopback to speakers: ${speakerSink}`);
-  
-  // Unmute speaker sink too just in case
-  run(`pactl set-sink-mute ${speakerSink} 0`);
-  run(`pactl set-sink-volume ${speakerSink} 100%`);
-
-  run(`pactl load-module module-loopback source=VirtualSink.monitor sink=${speakerSink} latency_msec=10`);
-  
-  console.log(`Audio Setup Complete. Routing VirtualSink.monitor -> ${speakerSink}`);
+  console.log("Audio Setup Complete. Dual Sink Architecture Active.");
 }
 
 function getCurrentMode() {

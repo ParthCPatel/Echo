@@ -11,3 +11,8 @@ contextBridge.exposeInMainWorld("recorderAPI", {
   getStatus: () => ipcRenderer.invoke("get-recording-status"),
   transcribe: (notes) => ipcRenderer.invoke("transcribe-recording", notes)
 });
+
+const { marked } = require("marked");
+contextBridge.exposeInMainWorld("utilsAPI", {
+  renderMarkdown: (text) => marked.parse(text)
+});
