@@ -1,8 +1,16 @@
 const { spawn } = require("child_process");
 const path = require("path");
+const { app } = require("electron");
+const fs = require("fs");
 
 let recordProcess = null;
-const RECORD_FILE = "test_app.wav";
+let currentRecordingPath = null;
+
+// Ensure recordings directory exists
+const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
+if (!fs.existsSync(RECORDINGS_DIR)) {
+    fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
+}
 
 function startRecording() {
   if (recordProcess) {
@@ -10,16 +18,19 @@ function startRecording() {
     return false;
   }
 
-  console.log("Starting recording...");
-  // parecord -d RecordingMixSink.monitor --file-format=wav test_app.wav
+  // Generate unique filename: recording_TIMESTAMP.wav
+  const filename = `recording_${Date.now()}.wav`;
+  currentRecordingPath = path.join(RECORDINGS_DIR, filename);
+
+  console.log(`Starting recording to ${currentRecordingPath}...`);
+  // parecord -d RecordingMixSink.monitor --file-format=wav /path/to/unique_file.wav
   recordProcess = spawn("parecord", [
     "-d", "RecordingMixSink.monitor",
     "--file-format=wav",
-    RECORD_FILE
+    currentRecordingPath
   ]);
 
   recordProcess.stdout.on("data", (data) => {
-    // parecord usually doesn't output much to stdout, but we can log it
     // console.log(`parecord stdout: ${data}`);
   });
 
@@ -38,24 +49,33 @@ function startRecording() {
 function stopRecording() {
   if (!recordProcess) {
     console.log("No recording to stop.");
-    return false;
+    return { success: false };
   }
 
   console.log("Stopping recording...");
-  recordProcess.kill("SIGINT"); // SIGINT allows parecord to finalize the WAV header
+  recordProcess.kill("SIGINT"); 
   recordProcess = null;
-  return true;
+  
+  // Return the path so we can save it to DB later
+  return { success: true, filePath: currentRecordingPath };
 }
 
-function playRecording() {
+function playRecording(customPath = null) {
   if (recordProcess) {
     console.log("Cannot play while recording.");
     return false;
   }
+  
+  // Use custom path if provided (for history), otherwise play last recording
+  const fileToPlay = customPath || currentRecordingPath;
 
-  console.log("Playing recording...");
-  // aplay test_app.wav
-  const playProcess = spawn("aplay", [RECORD_FILE]);
+  if (!fileToPlay) {
+      console.log("No recording available to play.");
+      return false;
+  }
+
+  console.log(`Playing recording: ${fileToPlay}...`);
+  const playProcess = spawn("aplay", [fileToPlay]);
 
   playProcess.on("close", (code) => {
     console.log(`aplay finished with code ${code}`);
@@ -65,7 +85,7 @@ function playRecording() {
 }
 
 function getRecordingStatus() {
-    return { isRecording: !!recordProcess };
+    return { isRecording: !!recordProcess, lastFilePath: currentRecordingPath };
 }
 
 module.exports = { startRecording, stopRecording, playRecording, getRecordingStatus };

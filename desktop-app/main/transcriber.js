@@ -1,23 +1,38 @@
 const fs = require("fs");
 const axios = require("axios");
 const path = require("path");
+const { app } = require("electron");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-async function transcribeFile(filePath) {
-    // If no path provided, default to test_app.wav in current directory
-    const fileToTranscribe = filePath || "test_app.wav";
+async function transcribeFile(filePath, language = "auto") {
+    // Default to last recording if filePath is null, but we usually should pass it or handle currentRecordingPath logic in main
+    // For now we assume the flow uses the default test_app.wav OR the main.js should have passed the correct path.
+    // BUT we didn't update main.js to pass the currentRecordingPath to transcribeFile. main.js calls transcribeFile(null, language).
+    // Let's stick to the current logic where it defaults to test_app.wav or we must fix main.js to use recorder.getRecordingStatus().lastFilePath
+    // Wait, let's just use the logic as is for the path, but fix the URL.
+    
+    const { getRecordingStatus } = require("./recorder");
+    const status = getRecordingStatus();
+    const fileToTranscribe = filePath || status.lastFilePath || path.join(app.getPath("userData"), "test_app.wav");
 
     if (!fs.existsSync(fileToTranscribe)) {
         throw new Error(`File not found: ${fileToTranscribe}`);
     }
 
-    const apiKey = process.env.DEEPGRAM_API_KEY;
-    if (!apiKey) {
-        throw new Error("DEEPGRAM_API_KEY is not set in .env file");
+    // HARDCODED FOR PRODUCTION BUILD
+    const apiKey = "622eced7b80a70bba9d33b3a57fe8466d7321e20"; 
+
+    console.log(`Transcribing file: ${fileToTranscribe} with language: ${language}`);
+    
+    // Construct URL
+    let deepgramUrl = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&diarize=true&punctuate=true&utterances=true";
+    
+    if (language === "auto") {
+        deepgramUrl += "&detect_language=true";
+    } else if (language) {
+        deepgramUrl += `&language=${language}`;
     }
 
-    console.log(`Transcribing file: ${fileToTranscribe}`);
-    
     // Read file once before retries
     const fileBuffer = fs.readFileSync(fileToTranscribe);
     console.log(`Read file size: ${fileBuffer.length} bytes`);
@@ -31,7 +46,7 @@ async function transcribeFile(filePath) {
         try {
             console.log(`Attempting transcription ${attempt}/${MAX_RETRIES}...`);
             const response = await axios.post(
-                "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&diarize=true&punctuate=true&utterances=true",
+                deepgramUrl,
                 fileBuffer,
                 {
                     headers: {

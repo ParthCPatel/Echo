@@ -7,12 +7,16 @@ contextBridge.exposeInMainWorld("audioAPI", {
 contextBridge.exposeInMainWorld("recorderAPI", {
   start: () => ipcRenderer.invoke("start-recording"),
   stop: () => ipcRenderer.invoke("stop-recording"),
-  play: () => ipcRenderer.invoke("play-recording"),
+  play: (filePath) => ipcRenderer.invoke("play-recording", filePath),
+  playPath: (path) => ipcRenderer.invoke("play-recording-path", path), // New for history
   getStatus: () => ipcRenderer.invoke("get-recording-status"),
-  transcribe: (notes) => ipcRenderer.invoke("transcribe-recording", notes)
+  transcribe: (notes, language) => ipcRenderer.invoke("transcribe-recording", notes, language)
 });
 
-const { marked } = require("marked");
-contextBridge.exposeInMainWorld("utilsAPI", {
-  renderMarkdown: (text) => marked.parse(text)
+contextBridge.exposeInMainWorld("historyAPI", {
+  fetchSessions: () => ipcRenderer.invoke("fetch-sessions"),
+  fetchSession: (id) => ipcRenderer.invoke("fetch-session", id),
+  saveSession: (data) => ipcRenderer.invoke("save-session", data)
 });
+
+console.log("Preload script finished setup.");

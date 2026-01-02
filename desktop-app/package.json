@@ -4,18 +4,36 @@
   "description": "Electron app for Linux audio capture with PulseAudio",
   "main": "main/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder"
   },
-  "author": "Echo Team",
+  "homepage": "https://github.com/ParthCPatel/Echo",
+  "build": {
+    "appId": "com.echo.desktop",
+    "productName": "Echo Audio Capture",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Audio",
+      "maintainer": "ParthCPatel <echo@example.com>"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "author": "Echo Team <echo@example.com>",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^33.2.1"
+    "electron": "^33.2.1",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.3",
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
-    "marked": "^17.0.1",
+    "marked": "12.0.2",
     "mongoose": "^9.1.1"
   }
 }
