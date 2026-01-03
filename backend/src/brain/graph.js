@@ -19,6 +19,12 @@ const GraphState = Annotation.Root({
   decisions: Annotation,
   validationErrors: Annotation,
   retryCount: Annotation,
+  // Translation Support
+  language: Annotation,
+  englishStructuredNotes: Annotation,
+  englishSummary: Annotation,
+  englishActionItems: Annotation,
+  englishDecisions: Annotation,
 });
 
 // --- Nodes ---
@@ -85,18 +91,20 @@ const extractEntities = async (state) => {
         t.start !== undefined
           ? t.start
           : t.startTime !== undefined
-          ? t.startTime
-          : 0;
+            ? t.startTime
+            : 0;
       return `[${Number(start).toFixed(1)}s]: ${t.transcript || t.text}`;
     })
     .join("\n");
+  const isEnglish = state.language === 'en';
+
   const tools = [
     {
       type: "function",
       function: {
         name: "extract_data",
         description:
-          "Extracts decisions/actions with evidence. Output text in the SAME LANGUAGE as the transcript.",
+          "Extracts decisions/actions with evidence. If language is not English, also provide English translations.",
         parameters: {
           type: "object",
           properties: {
@@ -124,6 +132,28 @@ const extractEntities = async (state) => {
               },
             },
             summary: { type: "string" },
+            // Translation Fields
+            englishSummary: { type: "string" },
+            englishActionItems: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  owner: { type: "string" },
+                  status: { type: "string" }
+                }
+              }
+            },
+            englishDecisions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" }
+                }
+              }
+            }
           },
           required: ["decisions", "actionItems", "summary"],
         },
@@ -131,12 +161,17 @@ const extractEntities = async (state) => {
     },
   ];
   const modelWithTools = model.bindTools(tools);
+  const systemPrompt = isEnglish
+    ? `Extract decisions/actions. MUST include verbatim transcript quotes.`
+    : `Extract decisions/actions in the ORIGINAL LANGUAGE (${state.language}). ALSO provide English translations for summary, actions, and decisions in the corresponding 'english*' fields.`;
+
   const response = await modelWithTools.invoke([
-    new SystemMessage(`Extract decisions/actions. MUST include verbatim transcript quotes. Output in the SAME LANGUAGE as the transcript (e.g. Hindi/English).
-TRANSCRIPT: ${transcriptText.slice(0, 50000)}`),
+    new SystemMessage(`${systemPrompt}\nTRANSCRIPT: ${transcriptText.slice(0, 50000)}`),
     new HumanMessage(`NOTES: ${state.rawNotes}`),
   ]);
   let result = { decisions: [], actionItems: [], summary: "" };
+  let englishResult = { englishDecisions: [], englishActionItems: [], englishSummary: "" };
+
   if (response.tool_calls && response.tool_calls.length > 0) {
     const args = response.tool_calls[0].args;
     result = {
@@ -144,11 +179,17 @@ TRANSCRIPT: ${transcriptText.slice(0, 50000)}`),
       actionItems: args.actionItems || [],
       summary: args.summary || "",
     };
+    // Populate English fields (fallback to original if missing/english)
+    englishResult = {
+      englishSummary: args.englishSummary || result.summary,
+      englishActionItems: args.englishActionItems || result.actionItems,
+      englishDecisions: args.englishDecisions || result.decisions
+    };
   }
+
   return {
-    decisions: result.decisions || [],
-    actionItems: result.actionItems || [],
-    summary: result.summary || "",
+    ...result,
+    ...englishResult
   };
 };
 
@@ -164,16 +205,32 @@ const verifyGrounding = async (state) => {
   return { decisions: validDecisions, actionItems: validActions };
 };
 
+const translateNotes = async (state) => {
+  // If English or missing, skip translation (just copy)
+  if (!state.language || state.language === 'en' || !state.structuredNotes) {
+    return { englishStructuredNotes: state.structuredNotes };
+  }
+
+  const response = await model.invoke([
+    new SystemMessage("You are a professional translator. Translate the following Markdown notes into English. Maintain all formatting, headers, and structure exactly. Output ONLY the translated markdown."),
+    new HumanMessage(state.structuredNotes),
+  ]);
+
+  return { englishStructuredNotes: response.content.toString() };
+};
+
 // --- Graph ---
 
 const graph = new StateGraph(GraphState)
   .addNode("validate_inputs", validateInputs)
   .addNode("process_notes", processNotes)
+  .addNode("translate_notes", translateNotes)
   .addNode("extract_entities", extractEntities)
   .addNode("verify_grounding", verifyGrounding)
   .addEdge("validate_inputs", "process_notes")
   .addEdge("validate_inputs", "extract_entities")
-  .addEdge("process_notes", END)
+  .addEdge("process_notes", "translate_notes")
+  .addEdge("translate_notes", END)
   .addEdge("extract_entities", "verify_grounding")
   .addEdge("verify_grounding", END)
   .setEntryPoint("validate_inputs");

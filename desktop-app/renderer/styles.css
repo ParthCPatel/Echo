@@ -262,6 +262,19 @@ body {
   transform: translateY(-3px);
 }
 
+.btn.small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.btn.secondary.active {
+  background: rgba(0, 217, 255, 0.2);
+  color: #00d9ff;
+  border-color: #00d9ff;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.2);
+}
+
 /* Navigation Buttons */
 .nav-group {
   display: flex;

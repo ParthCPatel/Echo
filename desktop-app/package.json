@@ -5,6 +5,7 @@
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",
+    "dev": "electron .",
     "build": "electron-builder"
   },
   "homepage": "https://github.com/ParthCPatel/Echo",

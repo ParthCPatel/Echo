@@ -114,28 +114,40 @@ async function loadHistory() {
     }
 }
 
+// Global State for Session
+let sessionDataGlobal = null;
+let isTranslated = false;
+
 function loadSessionIntoView(session) {
     console.log("Loading session:", session);
+    sessionDataGlobal = session;
+    isTranslated = false; // Reset to original language by default
 
-    // Set Global State
-    currentResults = {
-        summary: session.summary,
-        structuredNotes: session.structuredNotes,
-        actionItems: session.actionItems,
-        decisions: session.decisions
-    };
-    currentRawNotes = session.rawNotes;
-    currentSessionAudioPath = session.audioPath; // Update global audio path
+    // Update Global Audio Path
+    currentSessionAudioPath = session.audioPath;
 
-    // Populate Views
-    document.getElementById("content-raw-notes").innerText = currentRawNotes || "No raw notes.";
+    // Render Raw Notes (Fixed)
+    document.getElementById("content-raw-notes").innerText = session.rawNotes || "No raw notes.";
 
-    // Render Transcript
-    chatBox.innerHTML = ""; // Clear existing
+    // Render Transcript (Fixed)
+    renderTranscriptView(session);
+
+    // Render Enhanced Content (Variable)
+    renderSessionContent();
+
+    // Enable Nav Buttons
+    enableNavButtons(true);
+
+    // Show Enhanced View
+    switchView("enhanced");
+}
+
+function renderTranscriptView(session) {
+    const chatBox = document.getElementById("chat-box");
+    chatBox.innerHTML = "";
+
     const transcriptData = session.transcript;
-    // Check if transcript is array (diarized) or object (new format)
     if (Array.isArray(transcriptData)) {
-        // Assuming old format or array of utterances
         renderChat(transcriptData);
     } else if (transcriptData && transcriptData.content) {
         if (transcriptData.type === "diarization" && Array.isArray(transcriptData.content)) {
@@ -144,35 +156,77 @@ function loadSessionIntoView(session) {
             renderMessage(transcriptData.content, "right");
         }
     } else {
-        // Fallback
         renderMessage("No transcript data available.", "left");
     }
+}
 
-    // Render Enhanced Content
-    try {
-        document.getElementById("content-enhanced").innerHTML = parseMarkdown(currentResults.structuredNotes || "No notes generated.");
-        document.getElementById("content-summary").innerHTML = parseMarkdown(currentResults.summary || "No summary available.");
+function toggleTranslation() {
+    isTranslated = !isTranslated;
+    renderSessionContent();
+    updateToggleUI();
+}
 
-        const decisionsHtml = currentResults.decisions && currentResults.decisions.length > 0
-            ? currentResults.decisions.map(d => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px;"><strong>${d.text}</strong><div style="font-size:0.8em; color:#94a3b8; margin-top:4px;">"${d.evidence_quote}"</div></div>`).join("")
-            : "<p style='color:#666'>No key decisions detected.</p>";
-        document.getElementById("content-decisions").innerHTML = decisionsHtml;
-
-        const actionsHtml = currentResults.actionItems && currentResults.actionItems.length > 0
-            ? currentResults.actionItems.map(a => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px; border-left: 3px solid #22c55e;"><strong>${a.text}</strong><div style="font-size:0.85em; color:#22c55e;">Owner: ${a.owner || "Unassigned"}</div></div>`).join("")
-            : "<p style='color:#666'>No action items detected.</p>";
-        document.getElementById("content-actions").innerHTML = actionsHtml;
-
-        // Enable Nav Buttons
-        enableNavButtons(true);
-
-        // Show Enhanced View
-        switchView("enhanced");
-
-    } catch (err) {
-        console.error("Error rendering session:", err);
+function updateToggleUI() {
+    const btn = document.getElementById("btn-translate-toggle");
+    if (btn) {
+        btn.innerHTML = isTranslated ? "🌐 Show Original" : "🇬🇧 Translate to English";
+        btn.classList.toggle("active", isTranslated);
     }
 }
+
+function renderSessionContent() {
+    const session = sessionDataGlobal;
+    if (!session) return;
+
+    // Check if translation is available
+    const hasTranslation = session.language && session.language !== 'en' && session.englishStructuredNotes;
+
+    // Inject Toggle Button into Headers if needed
+    document.querySelectorAll('.notes-header').forEach(header => {
+        // Remove existing toggle if any
+        const existing = header.querySelector('#btn-translate-toggle');
+        if (existing) existing.remove();
+
+        if (hasTranslation) {
+            const btn = document.createElement("button");
+            btn.id = "btn-translate-toggle";
+            btn.className = "btn secondary small";
+            btn.style.marginLeft = "auto";
+            btn.innerText = isTranslated ? "🌐 Show Original" : "🇬🇧 Translate to English";
+            btn.onclick = toggleTranslation;
+            header.appendChild(btn);
+        }
+    });
+
+    // Prepare Data Source
+    const data = (isTranslated && hasTranslation) ? {
+        summary: session.englishSummary || session.summary, // Fallback
+        structuredNotes: session.englishStructuredNotes || session.structuredNotes,
+        actionItems: session.englishActionItems || session.actionItems,
+        decisions: session.englishDecisions || session.decisions
+    } : {
+        summary: session.summary,
+        structuredNotes: session.structuredNotes,
+        actionItems: session.actionItems,
+        decisions: session.decisions
+    };
+
+    // Render Views
+    document.getElementById("content-enhanced").innerHTML = parseMarkdown(data.structuredNotes || "No notes generated.");
+    document.getElementById("content-summary").innerHTML = parseMarkdown(data.summary || "No summary available.");
+
+    const decisionsHtml = data.decisions && data.decisions.length > 0
+        ? data.decisions.map(d => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px;"><strong>${d.text}</strong>${d.evidence_quote ? `<div style="font-size:0.8em; color:#94a3b8; margin-top:4px;">"${d.evidence_quote}"</div>` : ''}</div>`).join("")
+        : "<p style='color:#666'>No key decisions detected.</p>";
+    document.getElementById("content-decisions").innerHTML = decisionsHtml;
+
+    const actionsHtml = data.actionItems && data.actionItems.length > 0
+        ? data.actionItems.map(a => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px; display:flex; justify-content:space-between;"><span><strong>${a.text}</strong></span><span style="color:#00d9ff; font-size:0.9em;">${a.owner || 'Unassigned'}</span></div>`).join("")
+        : "<p style='color:#666'>No action items detected.</p>";
+    document.getElementById("content-actions").innerHTML = actionsHtml;
+}
+
+
 
 // Global recording path to track current session file
 let currentSessionAudioPath = null;

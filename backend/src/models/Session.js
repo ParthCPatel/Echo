@@ -20,7 +20,7 @@ const SessionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: []
   },
-  
+
   // AI Enhanced Results
   summary: {
     type: String,
@@ -39,8 +39,31 @@ const SessionSchema = new mongoose.Schema({
     text: String,
     evidence_quote: String
   }],
-  
-  tags: [String]
+
+  tags: [String],
+
+  // Translation Support
+  language: {
+    type: String,
+    default: "en"
+  },
+  englishSummary: {
+    type: String,
+    default: ""
+  },
+  englishStructuredNotes: {
+    type: String,
+    default: ""
+  },
+  englishActionItems: [{
+    text: String,
+    owner: String,
+    status: { type: String, default: 'open' }
+  }],
+  englishDecisions: [{
+    text: String,
+    evidence_quote: String
+  }]
 });
 
 export const Session = mongoose.model('Session', SessionSchema);

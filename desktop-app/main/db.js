@@ -1,6 +1,7 @@
 const { MongoClient } = require("mongodb");
 
-const uri = "mongodb://localhost:27017";
+// Use Atlas URI for Cloud Sync
+const uri = "mongodb+srv://parth2308:QRYfijerU3YOl2Wk@echo.iecu57p.mongodb.net/echo?appName=Echo";
 const client = new MongoClient(uri);
 const dbName = "echo";
 

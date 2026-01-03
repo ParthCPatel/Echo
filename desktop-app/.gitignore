@@ -1,3 +1,7 @@
 node_modules
 .env
 *.wav
+dist
+release
+build
+.DS_Store

@@ -10,12 +10,12 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/echo";
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); 
+app.use(express.json({ limit: '50mb' }));
 
 // --- Database Connection ---
 mongoose.connect(MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch(err => console.error("❌ MongoDB Connection Error:", err));
+    .then(() => console.log("✅ MongoDB Connected"))
+    .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
 // --- Routes ---
 
@@ -44,17 +44,26 @@ app.get('/sessions/:id', async (req, res) => {
 // 3. Save Session (Called after recording/transcription/enhancement)
 app.post('/sessions', async (req, res) => {
     try {
-        const { audioPath, transcript, rawNotes, enhancement } = req.body;
-        
-        // enhancement object contains { summary, structuredNotes, actionItems, decisions }
+        const { audioPath, transcript, rawNotes, enhancement, language } = req.body;
+
+        // enhancement object contains { summary, structuredNotes, actionItems, decisions, english* }
         const newSession = new Session({
             audioPath,
             rawNotes,
             transcript: transcript || [],
+            language: language || "en",
+
+            // Original
             summary: enhancement?.summary || "",
             structuredNotes: enhancement?.structuredNotes || "",
             actionItems: enhancement?.actionItems || [],
-            decisions: enhancement?.decisions || []
+            decisions: enhancement?.decisions || [],
+
+            // Translated
+            englishSummary: enhancement?.englishSummary || "",
+            englishStructuredNotes: enhancement?.englishStructuredNotes || "",
+            englishActionItems: enhancement?.englishActionItems || [],
+            englishDecisions: enhancement?.englishDecisions || []
         });
 
         await newSession.save();
@@ -69,30 +78,36 @@ app.post('/sessions', async (req, res) => {
 
 app.post('/enhance', async (req, res) => {
     try {
-        const { transcript, rawNotes } = req.body;
+        const { transcript, rawNotes, language } = req.body;
 
         if (!transcript) {
             return res.status(400).json({ error: "Missing transcript data" });
-        }          
+        }
 
         console.log("Received request for enhancement...");
         console.log("Raw Notes:", rawNotes);
-        console.log("Transcript items:", transcript.length);
+        console.log("Language:", language);
 
         // Invoke the LangGraph
         const result = await enhanceNotesGraph.invoke({
             transcript: transcript,
-            rawNotes: rawNotes || ""
+            rawNotes: rawNotes || "",
+            language: language || "en"
         });
 
         console.log("LangGraph execution complete.");
-        
+
         // Extract relevant outputs
         const responseData = {
             summary: result.summary,
             actionItems: result.actionItems,
             decisions: result.decisions,
-            structuredNotes: result.structuredNotes
+            structuredNotes: result.structuredNotes,
+            // Translations
+            englishSummary: result.englishSummary,
+            englishStructuredNotes: result.englishStructuredNotes,
+            englishActionItems: result.englishActionItems,
+            englishDecisions: result.englishDecisions
         };
 
         res.json({ success: true, data: responseData });

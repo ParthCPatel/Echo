@@ -7,6 +7,14 @@ const { transcribeFile } = require("./transcriber");
 const { connectDB, saveTranscript } = require("./db"); // Import DB module
 require("dotenv").config();
 
+// PRODUCTION API CONFIGURATION
+const API_BASE_URL = app.isPackaged
+  ? "https://echo-backend-6fok.onrender.com"
+  : "https://echo-backend-6fok.onrender.com"; // User requested Prod URL for dev
+
+console.log(`[Main] Running in ${app.isPackaged ? "PRODUCTION" : "DEVELOPMENT"} mode`);
+console.log(`[Main] API Endpoint: ${API_BASE_URL}`);
+
 let win;
 
 // ... (existing code handles window creation)
@@ -80,7 +88,7 @@ ipcMain.handle("get-recording-status", () => getRecordingStatus());
 // History IPC
 ipcMain.handle("fetch-sessions", async () => {
   try {
-    const response = await axios.get('http://localhost:3000/sessions');
+    const response = await axios.get(`${API_BASE_URL}/sessions`);
     return response.data;
   } catch (error) {
     console.error("Error fetching sessions:", error.message);
@@ -90,7 +98,7 @@ ipcMain.handle("fetch-sessions", async () => {
 
 ipcMain.handle("fetch-session", async (event, id) => {
   try {
-    const response = await axios.get(`http://localhost:3000/sessions/${id}`);
+    const response = await axios.get(`${API_BASE_URL}/sessions/${id}`);
     return response.data;
   } catch (error) {
     return { success: false, error: error.message };
@@ -100,7 +108,7 @@ ipcMain.handle("fetch-session", async (event, id) => {
 ipcMain.handle("save-session", async (event, data) => {
   try {
     console.log("Saving session to backend...");
-    const response = await axios.post('http://localhost:3000/sessions', data);
+    const response = await axios.post(`${API_BASE_URL}/sessions`, data);
     return response.data;
   } catch (error) {
     console.error("Error saving session:", error.message);
@@ -128,8 +136,8 @@ ipcMain.handle("transcribe-recording", async (event, notes, language) => {
     // Try to get enhanced notes from local backend, but don't fail if it's down
     let enhancementData = null;
     try {
-      console.log("[IPC] Attempting to fetch enhanced notes from backend (http://localhost:3000/enhance)...");
-      const response = await axios.post('http://localhost:3000/enhance', {
+      console.log(`[IPC] Attempting to fetch enhanced notes from backend (${API_BASE_URL}/enhance)...`);
+      const response = await axios.post(`${API_BASE_URL}/enhance`, {
         transcript: result.content, // Pass the structured content
         rawNotes: notes,
         language: language // Pass language context to backend
