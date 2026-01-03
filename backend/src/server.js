@@ -104,15 +104,17 @@ app.post('/enhance', async (req, res) => {
 
         res.json({
             success: true,
-            summary: result.summary,
-            structuredNotes: result.structuredNotes,
-            actionItems: result.actionItems,
-            decisions: result.decisions,
-            englishSummary: result.englishSummary,
-            englishStructuredNotes: result.englishStructuredNotes,
-            englishActionItems: result.englishActionItems,
-            englishDecisions: result.englishDecisions,
-            englishTranscript: result.englishTranscript // Return translated transcript
+            data: { // Wrap in 'data' object to match main.js expectation
+                summary: result.summary,
+                structuredNotes: result.structuredNotes,
+                actionItems: result.actionItems,
+                decisions: result.decisions,
+                englishSummary: result.englishSummary,
+                englishStructuredNotes: result.englishStructuredNotes,
+                englishActionItems: result.englishActionItems,
+                englishDecisions: result.englishDecisions,
+                englishTranscript: result.englishTranscript
+            }
         });
 
     } catch (error) {
