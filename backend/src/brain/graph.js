@@ -3,7 +3,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 
 const model = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash-lite",
+  model: "gemini-2.5-flash",
   temperature: 0,
 });
 
