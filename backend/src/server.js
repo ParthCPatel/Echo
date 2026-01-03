@@ -63,7 +63,8 @@ app.post('/sessions', async (req, res) => {
             englishSummary: enhancement?.englishSummary || "",
             englishStructuredNotes: enhancement?.englishStructuredNotes || "",
             englishActionItems: enhancement?.englishActionItems || [],
-            englishDecisions: enhancement?.englishDecisions || []
+            englishDecisions: enhancement?.englishDecisions || [],
+            englishTranscript: enhancement?.englishTranscript || [] // Save translated transcript
         });
 
         await newSession.save();
@@ -89,28 +90,30 @@ app.post('/enhance', async (req, res) => {
         console.log("Language:", language);
 
         // Invoke the LangGraph
+        // Result has { summary, structuredNotes, ..., englishStructuredNotes, englishTranscript, ... }
         const result = await enhanceNotesGraph.invoke({
-            transcript: transcript,
-            rawNotes: rawNotes || "",
+            rawNotes,
+            transcript: transcript || [], // Check for existing transcript or empty
             language: language || "en"
         });
 
         console.log("LangGraph execution complete.");
 
-        // Extract relevant outputs
-        const responseData = {
+        // Save (if this endpoint was responsible for saving, but here it just enhances)
+        // We just return it.
+
+        res.json({
+            success: true,
             summary: result.summary,
+            structuredNotes: result.structuredNotes,
             actionItems: result.actionItems,
             decisions: result.decisions,
-            structuredNotes: result.structuredNotes,
-            // Translations
             englishSummary: result.englishSummary,
             englishStructuredNotes: result.englishStructuredNotes,
             englishActionItems: result.englishActionItems,
-            englishDecisions: result.englishDecisions
-        };
-
-        res.json({ success: true, data: responseData });
+            englishDecisions: result.englishDecisions,
+            englishTranscript: result.englishTranscript // Return translated transcript
+        });
 
     } catch (error) {
         console.error("Error processing request:", error);

@@ -224,6 +224,31 @@ function renderSessionContent() {
         ? data.actionItems.map(a => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px; display:flex; justify-content:space-between;"><span><strong>${a.text}</strong></span><span style="color:#00d9ff; font-size:0.9em;">${a.owner || 'Unassigned'}</span></div>`).join("")
         : "<p style='color:#666'>No action items detected.</p>";
     document.getElementById("content-actions").innerHTML = actionsHtml;
+
+    // Render Transcript (Chat View)
+    const chatBox = document.getElementById("chat-box");
+    if (chatBox) {
+        chatBox.innerHTML = ""; // Clear existing
+
+        let transcriptArray = [];
+
+        if (isTranslated && session.englishTranscript && session.englishTranscript.length > 0) {
+            transcriptArray = session.englishTranscript;
+        } else {
+            // Original Transcript handling (unwrap if needed)
+            if (session.transcript && Array.isArray(session.transcript)) {
+                transcriptArray = session.transcript;
+            } else if (session.transcript && session.transcript.content && Array.isArray(session.transcript.content)) {
+                transcriptArray = session.transcript.content;
+            }
+        }
+
+        if (transcriptArray.length > 0) {
+            renderChat(transcriptArray);
+        } else {
+            chatBox.innerHTML = "<p style='color:#666; padding:20px; text-align:center;'>No transcript data available.</p>";
+        }
+    }
 }
 
 
@@ -309,63 +334,62 @@ btnTranscribe.addEventListener("click", async () => {
             console.log("Deepgram Result:", result.data);
             chatBox.innerHTML = ""; // Clear loader
 
-            // 1. Render Chat
-            if (result.data.type === "diarization") {
-                renderChat(result.data.content);
-            } else {
-                renderMessage(result.data.content, "right");
-            }
+            const enhancement = result.enhancement;
+            const transcriptData = result.data; // { type, content, language }
 
-            enableNavButtons(true);
+            // Construct a session object matching the structure used in history
+            const session = {
+                audioPath: currentSessionAudioPath,
+                rawNotes: notes,
+                transcript: transcriptData,
+                language: transcriptData.language || "en", // Correctly pass language
 
-            // 2. Handle AI Enhancement & SAVE SESSION
-            if (result.enhancement) {
-                currentResults = result.enhancement;
+                // Original Fields
+                summary: enhancement ? enhancement.summary : "",
+                structuredNotes: enhancement ? enhancement.structuredNotes : "",
+                actionItems: enhancement ? enhancement.actionItems : [],
+                decisions: enhancement ? enhancement.decisions : [],
 
-                // Populate Views locally
-                document.getElementById("content-raw-notes").innerText = currentRawNotes || "No raw notes taken.";
-                // ... (Rendering logic reused in loadSessionIntoView, but repeated here for immediate view)
-                // Ideally we refactor rendering, but for now:
-                document.getElementById("content-enhanced").innerHTML = parseMarkdown(currentResults.structuredNotes);
-                document.getElementById("content-summary").innerHTML = parseMarkdown(currentResults.summary);
+                // Translated Fields (Ensure these exist in enhancement object from backend)
+                englishSummary: enhancement ? enhancement.englishSummary : "",
+                englishStructuredNotes: enhancement ? enhancement.englishStructuredNotes : "",
+                englishActionItems: enhancement ? enhancement.englishActionItems : [],
+                englishDecisions: enhancement ? enhancement.englishDecisions : [],
+                englishTranscript: enhancement ? enhancement.englishTranscript : [] // Map translated transcript
+            };
 
-                // Save to History Backend
-                const sessionData = {
-                    audioPath: currentSessionAudioPath,
-                    transcript: result.data, // Should be the full object or content
-                    rawNotes: currentRawNotes,
-                    enhancement: currentResults
-                };
+            // Use the unified rendering function
+            loadSessionIntoView(session);
 
-                console.log("Saving session...", sessionData);
-                window.historyAPI.saveSession(sessionData)
+            // Save to History Backend (with language!)
+            // Note: DB saving might already happen in Main, but if we do it here:
+            // The renderer calls saveSession which calls main's save-session.
+            // Let's ensure we pass the correct structure.
+            const sessionDataToSave = {
+                audioPath: session.audioPath,
+                transcript: session.transcript,
+                rawNotes: session.rawNotes,
+                enhancement: enhancement, // Main process expects 'enhancement' object
+                language: session.language // Pass language explicitly to be saved
+            };
+
+            console.log("Saving session...", sessionDataToSave);
+            // Verify if historyAPI.saveSession is defined or use ipcRenderer
+            if (window.historyAPI && window.historyAPI.saveSession) {
+                window.historyAPI.saveSession(sessionDataToSave)
                     .then(res => {
                         console.log("Session saved successfully!", res);
-                        // Refresh History List in Sidebar
                         loadHistory();
                     })
                     .catch(err => console.error("Failed to save session:", err));
-
-                // Decisions & Actions Rendering (simplified for update)
-                const decisionsHtml = currentResults.decisions.length > 0
-                    ? currentResults.decisions.map(d => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px;"><strong>${d.text}</strong><div style="font-size:0.8em; color:#94a3b8; margin-top:4px;">"${d.evidence_quote}"</div></div>`).join("")
-                    : "<p style='color:#666'>No key decisions detected.</p>";
-                document.getElementById("content-decisions").innerHTML = decisionsHtml;
-
-                const actionsHtml = currentResults.actionItems.length > 0
-                    ? currentResults.actionItems.map(a => `<div style="margin-bottom:10px; padding:10px; background:#262626; border-radius:6px; border-left: 3px solid #22c55e;"><strong>${a.text}</strong><div style="font-size:0.85em; color:#22c55e;">Owner: ${a.owner || "Unassigned"}</div></div>`).join("")
-                    : "<p style='color:#666'>No action items detected.</p>";
-                document.getElementById("content-actions").innerHTML = actionsHtml;
-
-                switchView("enhanced");
-            } else {
-                switchView("transcript");
             }
 
         } else {
+            console.error("Transcription failed:", result.error);
             chatBox.innerHTML = `<p style="color:red; padding:20px;">Error: ${result.error}</p>`;
         }
         btnTranscribe.disabled = false;
+
     } catch (err) {
         console.error("Transcribe Error:", err);
         alert("Error in Transcribe Button: " + err.message);

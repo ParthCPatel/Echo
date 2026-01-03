@@ -63,7 +63,11 @@ const SessionSchema = new mongoose.Schema({
   englishDecisions: [{
     text: String,
     evidence_quote: String
-  }]
+  }],
+  englishTranscript: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  }
 });
 
 export const Session = mongoose.model('Session', SessionSchema);

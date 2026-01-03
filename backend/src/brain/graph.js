@@ -25,6 +25,7 @@ const GraphState = Annotation.Root({
   englishSummary: Annotation,
   englishActionItems: Annotation,
   englishDecisions: Annotation,
+  englishTranscript: Annotation, // New field for translated transcript
 });
 
 // --- Nodes ---
@@ -219,18 +220,57 @@ const translateNotes = async (state) => {
   return { englishStructuredNotes: response.content.toString() };
 };
 
+// --- Translate Transcript Node ---
+const translateTranscript = async (state) => {
+  // 1. Check if translation is needed
+  if (!state.language || state.language === 'en' || !state.transcript || state.transcript.length === 0) {
+    return { englishTranscript: state.transcript };
+  }
+
+  // 2. Prepare transcript chunks to avoid token limits (Basic chunking for now)
+  // For MVP, we'll try to translate the whole thing if it's small.
+
+  const transcriptJSON = JSON.stringify(state.transcript);
+
+  const systemPrompt = `You are a transcript translator.
+  You will receive a JSON array of transcript utterances.
+  Translate the 'text' (or 'transcript') field of each object into English.
+  Do NOT change 'speaker', 'start', 'end', or any other fields.
+  Output ONLY the valid JSON array.`;
+
+  try {
+    const response = await model.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(transcriptJSON),
+    ]);
+
+    // Clean up code blocks if the model adds them
+    let cleanJson = response.content.toString().replace(/```json/g, '').replace(/```/g, '').trim();
+    const translatedTranscript = JSON.parse(cleanJson);
+
+    return { englishTranscript: translatedTranscript };
+  } catch (e) {
+    console.warn("Transcript translation failed:", e);
+    // Fallback to original
+    return { englishTranscript: state.transcript };
+  }
+};
+
 // --- Graph ---
 
 const graph = new StateGraph(GraphState)
   .addNode("validate_inputs", validateInputs)
   .addNode("process_notes", processNotes)
   .addNode("translate_notes", translateNotes)
+  .addNode("translate_transcript", translateTranscript) // New Node
   .addNode("extract_entities", extractEntities)
   .addNode("verify_grounding", verifyGrounding)
   .addEdge("validate_inputs", "process_notes")
   .addEdge("validate_inputs", "extract_entities")
+  .addEdge("validate_inputs", "translate_transcript") // Parallel branch
   .addEdge("process_notes", "translate_notes")
   .addEdge("translate_notes", END)
+  .addEdge("translate_transcript", END)
   .addEdge("extract_entities", "verify_grounding")
   .addEdge("verify_grounding", END)
   .setEntryPoint("validate_inputs");

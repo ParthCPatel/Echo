@@ -8,9 +8,10 @@ const { connectDB, saveTranscript } = require("./db"); // Import DB module
 require("dotenv").config();
 
 // PRODUCTION API CONFIGURATION
-const API_BASE_URL = app.isPackaged
-  ? "https://echo-backend-6fok.onrender.com"
-  : "https://echo-backend-6fok.onrender.com"; // User requested Prod URL for dev
+// const API_BASE_URL = app.isPackaged
+//   ? "https://echo-backend-6fok.onrender.com"
+//   : "https://echo-backend-6fok.onrender.com"; // User requested Prod URL for dev
+const API_BASE_URL = "http://localhost:3000";
 
 console.log(`[Main] Running in ${app.isPackaged ? "PRODUCTION" : "DEVELOPMENT"} mode`);
 console.log(`[Main] API Endpoint: ${API_BASE_URL}`);
@@ -140,7 +141,7 @@ ipcMain.handle("transcribe-recording", async (event, notes, language) => {
       const response = await axios.post(`${API_BASE_URL}/enhance`, {
         transcript: result.content, // Pass the structured content
         rawNotes: notes,
-        language: language // Pass language context to backend
+        language: result.language // Pass detected language from Deepgram
       });
 
       console.log(`[IPC] Backend response status: ${response.status}`);
